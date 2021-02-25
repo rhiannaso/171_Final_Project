@@ -9,10 +9,9 @@ import json
 IP = "127.0.0.1"
 processId = None
 SERVER_PORT = None
-CLIENT_PORT = None
-CLIENT_PORTS = []
+MY_PORT = None
+SERVER_PORTS = []
 CLIENTS = []
-SERVER_SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 #takes stdin commands
 def processInput():
@@ -23,8 +22,6 @@ def processInput():
         elif command == "broadcast":
             broadcast()
         elif command == "exit":
-            CLIENT_SOCK.close()
-            for sock in CLIENTS: sock.close()
             os._exit(1)
 
     return
@@ -35,8 +32,8 @@ def broadcast():
 
 #connects to other clients
 def connect():
-    for id in CLIENT_PORTS:
-        if id != CLIENT_PORT:
+    for id in SERVER_PORTS:
+        if id != MY_PORT:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             address = (socket.gethostname(), id)
             sock.connect(address)
@@ -47,12 +44,12 @@ def connect():
 
 #listen for client connections
 def clientListener():
-    CLIENT_SOCK.listen(32)
+    MY_SOCK.listen(32)
     while True:
-        sock, address = CLIENT_SOCK.accept()
+        sock, address = MY_SOCK.accept()
         threading.Thread(target=clientResponse, args=(sock, address)).start()
 
-    CLIENT_SOCK.close()
+    MY_SOCK.close()
 
 #handles responses from the other clients
 def clientResponse(sock, address):
@@ -67,26 +64,22 @@ def clientRequest():
         pass
     return
 
-#prints all words in sentences
-def serverRequest():
-    pass
 
 if __name__ == '__main__':
     processId = int(sys.argv[1])
-    # SERVER_PORT = int(sys.argv[2])
 
     #reads config file for other client ports
     with open('./config.json') as configs:
         clientPortDict = json.load(configs)
-    CLIENT_PORT = clientPortDict[str(processId)]
+    MY_PORT = clientPortDict[str(processId)]
 
     for i in clientPortDict.keys():
-        CLIENT_PORTS.append(clientPortDict[i])
+        SERVER_PORTS.append(clientPortDict[i])
 
     #create 'server' of the current client
-    CLIENT_SOCK = socket.socket()
-    CLIENT_SOCK.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    CLIENT_SOCK.bind((socket.gethostname(), CLIENT_PORT))
+    MY_SOCK = socket.socket()
+    MY_SOCK.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    MY_SOCK.bind((socket.gethostname(), MY_PORT))
 
     threading.Thread(target=clientListener).start()
 
