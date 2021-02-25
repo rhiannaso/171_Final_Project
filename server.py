@@ -8,10 +8,9 @@ import json
 
 IP = "127.0.0.1"
 processId = None
-SERVER_PORT = None
 MY_PORT = None
 SERVER_PORTS = []
-CLIENTS = []
+SERVERS = []
 
 #takes stdin commands
 def processInput():
@@ -22,15 +21,17 @@ def processInput():
         elif command == "broadcast":
             broadcast()
         elif command == "exit":
+            MY_SOCK.close()
+            for sock in SERVERS: sock.close()
             os._exit(1)
 
     return
 
 def broadcast():
-    for sock in CLIENTS:
+    for sock in SERVERS:
         sock.sendall(f"Broadcast Received from Server {processId}".encode("utf8"))
 
-#connects to other clients
+#connects to other SERVERS
 def connect():
     for id in SERVER_PORTS:
         if id != MY_PORT:
@@ -38,28 +39,28 @@ def connect():
             address = (socket.gethostname(), id)
             sock.connect(address)
             print("Connected to " + str(id))
-            CLIENTS.append(sock)
+            SERVERS.append(sock)
 
-    threading.Thread(target=clientRequest).start()
+    threading.Thread(target=serverRequest).start()
 
-#listen for client connections
-def clientListener():
+#listen for server connections
+def serverListener():
     MY_SOCK.listen(32)
     while True:
         sock, address = MY_SOCK.accept()
-        threading.Thread(target=clientResponse, args=(sock, address)).start()
+        threading.Thread(target=serverResponse, args=(sock, address)).start()
 
     MY_SOCK.close()
 
-#handles responses from the other clients
-def clientResponse(sock, address):
+#handles responses from the other SERVERS
+def serverResponse(sock, address):
     while True:
         data = sock.recv(1024).decode("utf8")
         print(data)
     sock.close()
 
 #where code sits after connecting
-def clientRequest():
+def serverRequest():
     while True:
         pass
     return
@@ -81,6 +82,6 @@ if __name__ == '__main__':
     MY_SOCK.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     MY_SOCK.bind((socket.gethostname(), MY_PORT))
 
-    threading.Thread(target=clientListener).start()
+    threading.Thread(target=serverListener).start()
 
     processInput()

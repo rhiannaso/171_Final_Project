@@ -7,11 +7,9 @@ import time
 import json
 
 IP = "127.0.0.1"
-processId = None
-SERVER_PORT = None
 FOCUS_PORT = None
 SERVER_PORTS = []
-CLIENTS = []
+SERVERS = []
 SERVER_SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 #takes stdin commands
@@ -24,7 +22,7 @@ def processInput():
             broadcast()
         elif command == "exit":
             SERVER_SOCK.close()
-            for sock in CLIENTS: sock.close()
+            for sock in SERVERS: sock.close()
             os._exit(1)
 
     return
@@ -32,7 +30,7 @@ def processInput():
 def broadcast():
         SERVER_SOCK.sendall(f"Broadcast Received from Client".encode("utf8"))
 
-#connects to other clients
+#connects to other SERVERS
 def connect():
     for id in SERVER_PORTS:
         if id != FOCUS_PORT:
@@ -40,7 +38,7 @@ def connect():
             address = (socket.gethostname(), id)
             sock.connect(address)
             print("Connected to Server with Port " + str(id))
-            CLIENTS.append(sock)
+            SERVERS.append(sock)
         elif id == FOCUS_PORT:
             address = (socket.gethostname(), id)
             SERVER_SOCK.connect(address)
@@ -48,15 +46,16 @@ def connect():
 
     threading.Thread(target=clientRequest).start()
 
-#where code sits after connecting
+#where code waits to receive from server
 def clientRequest():
+    print("entered Loop")
     while True:
-        pass
+        data = SERVER_SOCK.recv(1024).decode("utf8")
+        print(data)
     return
 
 if __name__ == '__main__':
     FOCUS_PORT = int(sys.argv[1])
-    # SERVER_PORT = int(sys.argv[2])
 
     #reads config file for other client ports
     with open('./config.json') as configs:
