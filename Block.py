@@ -1,8 +1,9 @@
 class Block:
-  def __init__(self, op, hp, nonce):
+  def __init__(self, op, hp, nonce, tag):
     self.op = op[:] # List of op, key, val
     self.hp = hp # String
     self.nonce = nonce # String
+    self.tag = tag # String
 
   def getOpType(self):
     return self.op[0]
@@ -39,3 +40,9 @@ class Block:
 
   def setNonce(self, nonce):
     self.nonce = nonce
+
+  def getTag(self):
+    return self.tag
+
+  def setTag(self, tag):
+    self.tag = tag

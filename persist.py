@@ -12,7 +12,7 @@ def addToChain(op, key, hp, nonce, val="none"):
     tmpOp = [op, key, val]
   else:
     tmpOp = [op, key]
-  tmpBlock = Block(tmpOp, hp, nonce)
+  tmpBlock = Block(tmpOp, hp, nonce, "tentative") # TODO: if decide received from leader, set to "decided"
   blockchain.append(tmpBlock)
 
 def buildString():
@@ -43,6 +43,7 @@ def printChain():
     print("OP: ", block.getOpString())
     print("HASH POINTER: ", block.getHashPtr())
     print("NONCE: ", block.getNonce())
+    print("TAG: ", block.getTag())
     print("------")
 
 def rebuild():
@@ -55,7 +56,7 @@ def rebuild():
     block = block.strip("{}") # Strip braces off block
     elems = block.split(",")
     fullOp = elems[0].strip("<>").split("|") # Strip op surroundings
-    newBlock = Block(fullOp, elems[1], elems[2]) # Reconstruct block
+    newBlock = Block(fullOp, elems[1], elems[2], "tentative") # Reconstruct block TODO: if decide received from leader, set to "decided"
     blockchain.append(newBlock) # Add block to blockchain
   printChain()
 
