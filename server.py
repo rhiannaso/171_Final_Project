@@ -1,10 +1,4 @@
-import socket
-import sys
-import threading
-import os
-import queue
-import time
-import json
+import socket, sys, threading, os, queue, time, json
 
 from queue import Queue
 from block import Block
@@ -32,6 +26,9 @@ def addToChain(op, key, hp, nonce, val="none"):
   tmpBlock = Block(tmpOp, hp, nonce, "tentative") # TODO: if decide received from leader, set to "decided"
   blockchain.append(tmpBlock)
 
+def addToQueue(op):
+  tempOp.put(op)
+
 def buildString():
   global blockchain
   fString = ""
@@ -50,6 +47,23 @@ def buildString():
     i += 1
     # TODO: Add additional field for tentative vs. decided
   return fString
+
+def printKV():
+  global portal
+  for key in portal:
+    print("KEY: ", key)
+    print("VAL: ", portal[key])
+    print("------")
+
+def printQueue():
+  global tempOp
+  while not tempOp.empty():
+    op = tempOp.get()
+    print("OP: ", op[0])
+    print("KEY: ", op[1])
+    if op[0] == "put":
+      print("VAL: ", op[2])
+    print("------")
 
 def printChain():
   global blockchain
@@ -122,6 +136,17 @@ def processInput():
             printChain()
         elif command == "rebuild":
             rebuild()
+        elif command == "queue": # TEMP: Used to demo adding to queue
+          tempOp = ["get", "1234567"]
+          addToQueue(tempOp)
+          tempOp = ["put", "7654321", {"phone_number": "111-222-3333"}]
+          addToQueue(tempOp)
+          printQueue()
+        elif command == "dict": # TEMP: used to demo adding to key-value store
+          key = "1234567"
+          val = {"phone_number": "111-222-3333"}
+          portal[key] = val
+          printKV()
 
     return
 
