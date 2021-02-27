@@ -51,7 +51,11 @@ def clientRequest():
     print("entered Loop")
     while True:
         data = SERVER_SOCK.recv(1024).decode("utf8")
-        print(data)
+        if(data):
+            print(data)
+        if not data:
+            sock.close()
+            break
     return
 
 if __name__ == '__main__':
