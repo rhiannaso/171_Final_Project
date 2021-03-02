@@ -9,7 +9,7 @@ import json
 IP = "127.0.0.1"
 FOCUS_PORT = None
 SERVER_PORTS = []
-SERVERS = []
+SERVERS = {}
 SERVER_SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 #takes stdin commands
@@ -20,6 +20,8 @@ def processInput():
             connect()
         elif command == "broadcast":
             broadcast()
+        elif 'swap' in command:
+            swap(command[5:])
         elif command == "exit":
             SERVER_SOCK.close()
             for sock in SERVERS: sock.close()
@@ -27,34 +29,37 @@ def processInput():
 
     return
 
+def swap(PORT):
+    global FOCUS_PORT
+    FOCUS_PORT = int(PORT)
+    print("Primary Server Swapped to PORT " + str(PORT))
+
 def broadcast():
-        SERVER_SOCK.sendall(f"Broadcast Received from Client".encode("utf8"))
+    SERVERS[FOCUS_PORT].sendall(f"Broadcast Received from Client".encode("utf8"))
+    print(FOCUS_PORT)
 
 #connects to other SERVERS
 def connect():
     for id in SERVER_PORTS:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        address = (socket.gethostname(), id)
+        sock.connect(address)
+        SERVERS[id] = sock
+        threading.Thread(target=clientRequest, args=(sock,id)).start()
         if id != FOCUS_PORT:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            address = (socket.gethostname(), id)
-            sock.connect(address)
             print("Connected to Server with Port " + str(id))
-            SERVERS.append(sock)
         elif id == FOCUS_PORT:
-            address = (socket.gethostname(), id)
-            SERVER_SOCK.connect(address)
             print("Connect with Primary Server " + str(id))
 
-    threading.Thread(target=clientRequest).start()
+    
 
 #where code waits to receive from server
-def clientRequest():
-    print("entered Loop")
+def clientRequest(sock, id):
     while True:
-        data = SERVER_SOCK.recv(1024).decode("utf8")
-        if(data):
+        data = sock.recv(1024).decode("utf8")
+        if(data and id == FOCUS_PORT):
             print(data)
         if not data:
-            sock.close()
             break
     return
 

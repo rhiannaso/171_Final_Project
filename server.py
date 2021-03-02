@@ -3,11 +3,13 @@ import socket, sys, threading, os, queue, time, json
 from queue import Queue
 from block import Block
 
+#Socket Vars
 IP = "127.0.0.1"
 processId = None
 MY_PORT = None
 SERVER_PORTS = []
 SERVERS = []
+CLIENTS = []
 
 #BlockChain Vars
 portal = {} # Key-value store
@@ -98,7 +100,30 @@ def write():
   f.write(bcString)
   f.flush()
 
-#____________________________________________
+def inputBuild():
+  addToChain(
+  "put", 
+  "1234567", 
+  "1234567812345678123456781234567812345678123456781234567812345678", 
+  "0",
+  {"phone_number": "111-222-3333"}
+  )
+  addToChain(
+  "get", 
+  "7654321", 
+  "87654321ABCDEF9087654321ABCDEF9087654321ABCDEF9087654321ABCDEF90", 
+  "1"
+  )
+  addToChain(
+  "get", 
+  "5555555", 
+  "ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01", 
+  "2"
+  )
+  write()
+  printChain()
+
+#Socket Code____________________________________________
 
 #takes stdin commands
 def processInput():
@@ -108,32 +133,15 @@ def processInput():
             connect()
         elif command == "broadcast":
             broadcast()
+        elif command == "clientBroadcast":
+          for sock in CLIENTS:
+            sock.sendall(f"test".encode("utf8"))
         elif command == "exit":
             MY_SOCK.close()
             for sock in SERVERS: sock.close()
             os._exit(1)
         elif command == "build":
-            addToChain(
-            "put", 
-            "1234567", 
-            "1234567812345678123456781234567812345678123456781234567812345678", 
-            "0",
-            {"phone_number": "111-222-3333"}
-            )
-            addToChain(
-            "get", 
-            "7654321", 
-            "87654321ABCDEF9087654321ABCDEF9087654321ABCDEF9087654321ABCDEF90", 
-            "1"
-            )
-            addToChain(
-            "get", 
-            "5555555", 
-            "ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01", 
-            "2"
-            )
-            write()
-            printChain()
+            inputBuild()
         elif command == "rebuild":
             rebuild()
         elif command == "queue": # TEMP: Used to demo adding to queue
@@ -172,6 +180,8 @@ def serverListener():
     while True:
         sock, address = MY_SOCK.accept()
         threading.Thread(target=serverResponse, args=(sock, address)).start()
+        if not sock in SERVERS:
+          CLIENTS.append(sock)
 
     MY_SOCK.close()
 
