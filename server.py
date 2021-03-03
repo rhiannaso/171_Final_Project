@@ -50,9 +50,9 @@ def buildString():
         fString += ","
         fString += block.getNonce()
         if i != len(blockchain) - 1:
-        fString += "};"
+            fString += "};"
         else:
-        fString += "}"
+            fString += "}"
         i += 1
         # TODO: Add additional field for tentative vs. decided
     return fString
@@ -71,7 +71,7 @@ def printQueue():
         print("OP: ", op[0])
         print("KEY: ", op[1])
         if op[0] == "put":
-        print("VAL: ", op[2])
+            print("VAL: ", op[2])
         print("------")
 
 def printChain():
@@ -107,7 +107,7 @@ def write():
     f.write(bcString)
     f.flush()
 
-    def inputBuild():
+def inputBuild():
     addToChain(
     "put", 
     "1234567", 
