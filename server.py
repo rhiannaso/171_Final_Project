@@ -179,7 +179,8 @@ def formatOp(op):
 
 # Accept Code_________________________________
 def propose(): # Should already be elected
-    global tempOp, bNum
+    global tempOp, bNum, promises, receivedB, myVal
+    promises = 0 # Reset promises
     opBlock = tempOp.queue[0] # Access first op in queue
     op = formatOp(opBlock) # Concatenate op together
     nonce = calcNonce(op) # Calculate nonce
@@ -193,6 +194,8 @@ def propose(): # Should already be elected
     msg = Propose("propose", bNum, newBlock)
     pMsg = pickle.dumps(msg)
     broadcastMsg(pMsg)
+    receivedB = (0,0,0) # Reset receivedB
+    myVal = None # Reset myVal
     # msg = "propose|"+formatBNum(bNum)+"|"+formatOpField([realOp, hashVal, nonce])
     # broadcast(msg)
 
@@ -235,6 +238,8 @@ def calcNonce(op):
 
 # Decide Code_________________________________
 def decide(b, val):
+    global accepts
+    accepts = 0 # Reset accepts
     op = val.getOp()
     hp = val.getHashPtr()
     nonce = val.getNonce()
@@ -281,7 +286,7 @@ def nonLDecide(b, val):
     hp = val.getHashPtr()
     nonce = val.getNonce()
     # Append block to blockchain
-    if val[0][0] == "put":
+    if op[0] == "put":
         addToChain(op[0], op[1], hp, nonce, op[2])
     else:
         addToChain(op[0], op[1], hp, nonce)
