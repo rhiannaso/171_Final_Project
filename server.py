@@ -395,7 +395,7 @@ def serverListener():
 
 #handles responses from the other SERVERS
 def serverResponse(sock, address):
-    global accepts, promises, myVal, receivedB
+    global accepts, promises, myVal, receivedB, isLeader
     while True:
         #data = sock.recv(1024).decode("utf8")
         data = sock.recv(1024) # NOTE: if we want to receive any strings now, need to separately decode utf8
@@ -415,6 +415,7 @@ def serverResponse(sock, address):
                 # Increment promises
                 promises += 1
                 if promises >= 3: 
+                    isLeader = True # TODO: Handle tentative/decided fields depending on if leader or not
                     propose() # Is now leader
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
                 b = dataMsg.getBNum()
