@@ -274,7 +274,7 @@ def updateKV(op):
         if v is None:
             msg = "NO_KEY"
         else:
-            msg = v.get("phone_number")
+            msg = v
     return msg
 
 def replyClient(msg):
