@@ -274,7 +274,7 @@ def updateKV(op):
         if v is None:
             msg = "NO_KEY"
         else:
-            msg = v
+            msg = v.get("phone_number")
     return msg
 
 def replyClient(msg):
@@ -341,6 +341,9 @@ def processInput():
             pMsg = pickle.dumps(msg)
             for sock in SERVERS:
                 sock.sendall(pMsg)
+        elif command == "kv":
+            op = ["get", "1234567"]
+            updateKV(op)
 
     return
 
