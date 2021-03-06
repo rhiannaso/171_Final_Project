@@ -7,6 +7,7 @@ from propose import Propose
 from promise import Promise
 from accepted import Accepted
 from decide import Decide
+from opRequest import OpRequest
 from hashlib import sha256
 
 #Socket Vars
@@ -206,18 +207,22 @@ def accept(b, val):
         acceptVal = val # TODO: Change so tag field not always tentative
         msg = Accepted("accepted", b, val)
         pMsg = pickle.dumps(msg)
+        broadcastMsg(pMsg)
         # TODO: send pMsg to just the leader
         # msg = "accepted|"+formatBNum(b)+"|"+formatOpField(val)
         # send_to_leader(msg)
 
 def calcHashPtr():
     global blockchain
-    if len(blockchain) > 0: # If not the first block in the blockchain
+    if len(blockchain) > 1: # If not the first block in the blockchain
         prevBlock = blockchain[-1] # Get previous block
         op = formatOp(prevBlock.getOp()) # Concatenate op
         nonce = prevBlock.getNonce()
         hp = prevBlock.getHashPtr()
-        concat = op+nonce+hp # Concatenate string vals of op, nonce, hash
+        if hp is not None:
+            concat = op+nonce+hp # Concatenate string vals of op, nonce, hash
+        else: # If previous block was the first block, hash will be None so don't concatenate
+            concat = op+nonce
         hashPtr = sha256(concat.encode()) # Calculate hash
         return hashPtr.hexdigest()
     else: # If first block in blockchain
@@ -422,23 +427,41 @@ def serverResponse(sock, address):
                         myVal = val
                 # Increment promises
                 promises += 1
-                if promises >= 3: 
+                if promises >= 2: # Only need two more, already have own approval
                     isLeader = True # TODO: Handle tentative/decided fields depending on if leader or not
                     propose() # Is now leader
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
+                print("GOT PROPOSE")
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock() # use val.getOp(), val.getHashPtr(), val.getNonce() to get fields
                 accept(b, val)
-            if isinstance(dataMsg, Accepted): # Receiving ACCEPTED
+            if isinstance(dataMsg, Accepted) and isLeader: # Receiving ACCEPTED
+                print("GOT ACCEPTED")
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock() # use val.getOp(), val.getHashPtr(), val.getNonce() to get fields
                 accepts += 1
-                if accepts >= 3: 
+                print(accepts)
+                if accepts >= 2: # Only need two more, already have own approval
                     decide(b, val)
             if isinstance(dataMsg, Decide): # Receiving DECIDE
+                print("GOT DECIDE")
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock() # use val.getOp(), val.getHashPtr(), val.getNonce() to get fields
                 nonLDecide(b, val) # decide as a participant
+            if isinstance(dataMsg, OpRequest): # Receiving request from CLIENT
+                op = dataMsg.getOp()
+                key = dataMsg.getKey()
+                print("OP: ", op)
+                print("KEY: ", key)
+                if op == "put":
+                    val = dataMsg.getVal()
+                    print("VAL: ", val)
+                    tmpOp = [op, key, val]
+                else:
+                    tmpOp = [op, key]
+                addToQueue(tmpOp)
+                isLeader = True
+                propose()
 
             # if "promise" in data: # Assume promise|depth,seqNum,pid|b_depth,b_seqNum,b_pid|op,key,val;hash,nonce
             #     parsedVals = parseBVal(data, "promise")
