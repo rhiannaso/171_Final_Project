@@ -1,10 +1,5 @@
-import socket
-import sys
-import threading
-import os
-import queue
-import time
-import json
+import socket, sys, threading, os, queue, time, json, pickle
+from opRequest import OpRequest
 
 IP = "127.0.0.1"
 FOCUS_PORT = None
@@ -26,6 +21,18 @@ def processInput():
             SERVER_SOCK.close()
             for sock in SERVERS: sock.close()
             os._exit(1)
+        elif "operation" in command.lower():
+            parsed = command.replace("(", "").replace(")", "")
+            parsed = parsed.lower().replace("operation", "")
+            vals = parsed.split(",")
+            op = vals[0].strip()
+            key = vals[1].strip()
+            req = OpRequest(op, key)
+            if op == "put":
+                val = vals[2].strip()
+                req = OpRequest(op, key, val)
+            msg = pickle.dumps(req)
+            SERVERS[FOCUS_PORT].sendall(msg)
 
     return
 
