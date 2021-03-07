@@ -28,11 +28,9 @@ def processInput():
             op = vals[0].strip()
             key = vals[1].strip()
             req = OpRequest(op, key)
-            print("HERE: ", op, key)
             if op == "put":
                 val = vals[2].strip()
                 req = OpRequest(op, key, val)
-                print("THERE: ", op, key, val)
             msg = pickle.dumps(req)
             SERVERS[FOCUS_PORT].sendall(msg)
 

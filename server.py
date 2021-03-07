@@ -285,6 +285,7 @@ def updateKV(op):
 def replyClient(msg):
     for sock in CLIENTS:
         sock.sendall(f"{msg}".encode("utf8"))
+    # TODO: need to send back to particular client, not all clients
 
 def nonLDecide(b, val):
     op = val.getOp()
@@ -438,7 +439,6 @@ def serverResponse(sock, address):
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock() # use val.getOp(), val.getHashPtr(), val.getNonce() to get fields
                 accepts += 1
-                print(accepts)
                 if accepts >= 2: # Only need two more, already have own approval
                     decide(b, val)
             if isinstance(dataMsg, Decide): # Receiving DECIDE
