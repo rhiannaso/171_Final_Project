@@ -431,12 +431,10 @@ def serverResponse(sock, address):
                     isLeader = True # TODO: Handle tentative/decided fields depending on if leader or not
                     propose() # Is now leader
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
-                print("GOT PROPOSE")
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock() # use val.getOp(), val.getHashPtr(), val.getNonce() to get fields
                 accept(b, val)
             if isinstance(dataMsg, Accepted) and isLeader: # Receiving ACCEPTED
-                print("GOT ACCEPTED")
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock() # use val.getOp(), val.getHashPtr(), val.getNonce() to get fields
                 accepts += 1
@@ -444,18 +442,14 @@ def serverResponse(sock, address):
                 if accepts >= 2: # Only need two more, already have own approval
                     decide(b, val)
             if isinstance(dataMsg, Decide): # Receiving DECIDE
-                print("GOT DECIDE")
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock() # use val.getOp(), val.getHashPtr(), val.getNonce() to get fields
                 nonLDecide(b, val) # decide as a participant
             if isinstance(dataMsg, OpRequest): # Receiving request from CLIENT
                 op = dataMsg.getOp()
                 key = dataMsg.getKey()
-                print("OP: ", op)
-                print("KEY: ", key)
                 if op == "put":
                     val = dataMsg.getVal()
-                    print("VAL: ", val)
                     tmpOp = [op, key, val]
                 else:
                     tmpOp = [op, key]
