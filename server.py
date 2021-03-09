@@ -125,22 +125,6 @@ def write():
     f.write(bcString)
     f.flush()
 
-# def tentativeWrite(block):
-#     global master
-#     f = open(master, "a")
-#     tmp = "{"+block.getOpString()+","
-#     if block.getHashPtr() is None:
-#         tmp += "None,"
-#     else:
-#         tmp += block.getHashPtr()
-#         tmp += ","
-#     tmp += block.getNonce()
-#     tmp += ","
-#     tmp += block.getTag()
-#     tmp += "};"
-#     f.write(tmp)
-#     f.flush()
-
 def inputBuild():
     addToChain(
     "put", 
@@ -199,7 +183,6 @@ def propose(): # Should already be elected
     opBlock = tempOp.queue[0] # Access first op in queue
     op = formatOp(opBlock) # Concatenate op together
     nonce = calcNonce(op) # Calculate nonce
-    #realOp = tempOp.get() # TODO: Might not want to pop yet
     hashVal = calcHashPtr()
     newBlock = None
     if myVal is None: # If all received vals are bottom
@@ -212,15 +195,12 @@ def propose(): # Should already be elected
     receivedB = (0,0,0) # Reset receivedB
     myVal = None # Reset myVal
     promised = False
-    # msg = "propose|"+formatBNum(bNum)+"|"+formatOpField([realOp, hashVal, nonce])
-    # broadcast(msg)
 
 def accept(b, val):
     global bNum
     if b[0] >= bNum[0]:
         acceptNum = b
         acceptVal = val
-        #tentativeWrite(val)
         # Add to chain tentatively
         op = val.getOp()
         hp = val.getHashPtr()
@@ -234,8 +214,7 @@ def accept(b, val):
         pMsg = pickle.dumps(msg)
         broadcastMsg(pMsg)
         # TODO: send pMsg to just the leader
-        # msg = "accepted|"+formatBNum(b)+"|"+formatOpField(val)
-        # send_to_leader(msg)
+        # send_to_leader(pMsg)
 
 def calcHashPtr():
     global blockchain
@@ -291,7 +270,6 @@ def decide(b, val):
     pMsg = pickle.dumps(msg)
     broadcastMsg(pMsg)
     decided = False
-    #msg = "decide|"+formatBNum(b)+"|"+formatOpField(val)
 
 def updateKV(op):
     global portal
@@ -330,7 +308,6 @@ def nonLDecide(b, val):
     write() # Rewrite file 
     # Update KV
     updateKV(op)
-    printKV()
 
 #Socket Code____________________________________________
 
@@ -431,7 +408,7 @@ def serverResponse(sock, address):
             if isinstance(dataMsg, Promise): # Receiving PROMISE
                 ballotNum = dataMsg.getBNum()
                 b = dataMsg.getB()
-                val = dataMsg.getBlock() # use val.getOp(), val.getHashPtr(), val.getNonce() to get fields
+                val = dataMsg.getBlock()
                 # If val is None, do nothing (myVal is still your block)
                 if val is not None: # If val is not None and b > receivedB, set myVal = val
                     if compareBallots(b, receivedB) > 0:
@@ -440,7 +417,7 @@ def serverResponse(sock, address):
                 promises += 1
                 if promises >= 2 and not promised: # Only need two more, already have own approval
                     promised = True
-                    isLeader = True # TODO: Handle tentative/decided fields depending on if leader or not
+                    isLeader = True
                     propose() # Is now leader
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
                 b = dataMsg.getBNum()
