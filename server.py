@@ -11,13 +11,16 @@ from opRequest import OpRequest
 from ballotNum import BallotNum
 from hashlib import sha256
 from time import sleep
+from leader import Leader
+from links import FailLink, FixLink, TestMsg
 
 #Socket Vars
 IP = "127.0.0.1"
 processId = None
 MY_PORT = None
 SERVER_PORTS = []
-SERVERS = []
+SERVERS = {}
+SERVER_LINKS = {}
 CLIENTS = []
 delay = 5
 
@@ -166,6 +169,25 @@ def formatOp(op):
         tmp += str(op[2])
     return tmp
 
+# Leader Election Code_________________________________
+
+def sendPrepare():
+    global bNum
+    prepMsg = Prepare('prepare', BallotNum(bNum.getDepth, bNum.getSeqNum+1, bNum.getPid))
+    broadcastMsg(pickle.dumps(prepMsg))
+    #TODO add timeout for promise msgs
+
+def sendPromise():
+    promMsg = Promise('promise', bNum, acceptNum, acceptVal)
+    broadcastMsg(pickle.dumpts(promMsg))
+
+def promiseReceived():
+    promises+=1
+    if promises >= 2:
+        isLeader = True
+    
+    return isLeader
+
 # Accept Code_________________________________
 def propose(): # Should already be elected
     global tempOp, bNum, promises, receivedB, myVal, promised
@@ -306,9 +328,13 @@ def failProcess():
     os._exit(1)
 
 def failLink(src, dest):
+    SERVER_LINKS[int(dest)] = False
+    SERVERS[int(dest)].sendall(pickle.dumps(FailLink(src, dest)))
     return # TODO: stub
 
 def fixLink(src, dest):
+    SERVER_LINKS[int(dest)] = True
+    SERVERS[int(dest)].sendall(pickle.dumps(FixLink(src, dest)))
     return # TODO: stub
 
 #takes stdin commands
@@ -352,12 +378,14 @@ def processInput():
 
 def broadcastMsg(msg): # Broadcast pickled messages
     sleep(delay)
-    for sock in SERVERS:
-        sock.sendall(msg)
+    for id in SERVERS:
+        if SERVER_LINKS[id]:
+            SERVERS[id].sendall(msg)
 
 def broadcast():
-    for sock in SERVERS:
-        sock.sendall(f"Broadcast Received from Server {processId}".encode("utf8"))
+    for id in SERVERS:
+        if SERVER_LINKS[id]:
+            SERVERS[id].sendall(pickle.dumps(TestMsg(f"Broadcast Received from Server {processId}")))
 
 #connects to other SERVERS
 def connect():
@@ -367,7 +395,8 @@ def connect():
             address = (socket.gethostname(), id)
             sock.connect(address)
             print("Connected to " + str(id))
-            SERVERS.append(sock)
+            SERVERS[id] = sock
+            SERVER_LINKS[id] = True
 
     threading.Thread(target=serverRequest).start()
 
@@ -384,15 +413,20 @@ def serverListener():
 
 #handles responses from the other SERVERS
 def serverResponse(sock, address):
-    global accepts, promises, myVal, receivedB, isLeader, decided, promised, paxosRun
+    global accepts, promises, myVal, receivedB, isLeader, decided, promised, paxosRun, bNum
     while True:
         #data = sock.recv(1024).decode("utf8")
         data = sock.recv(1024) # NOTE: if we want to receive any strings now, need to separately decode utf8
         if data:
             #print(data)
             dataMsg = pickle.loads(data)
+            if isinstance(dataMsg, Leader): # Receiving LEADER
+                sendPrepare()
             if isinstance(dataMsg, Prepare): # Receiving PREPARE
                 bal = dataMsg.getBNum()
+                if bal.compare(bNum) > -1:
+                    bNum = bal
+                    sendPromise(bal)
             if isinstance(dataMsg, Promise): # Receiving PROMISE
                 ballotNum = dataMsg.getBNum()
                 b = dataMsg.getB()
@@ -440,6 +474,12 @@ def serverResponse(sock, address):
                         if not paxosRun:
                             paxosRun = True
                             propose()
+            if isinstance(dataMsg, FailLink):
+                SERVER_LINKS[int(dataMsg.getSrc())] = False
+            if isinstance(dataMsg, FixLink):
+                SERVER_LINKS[int(dataMsg.getSrc())] = True
+            if isinstance(dataMsg, TestMsg):
+                print(dataMsg.getMsg())
 
         if not data:
             sock.close()
