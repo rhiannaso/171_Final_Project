@@ -1,10 +1,11 @@
 from block import Block
+from ballotNum import BallotNum
 
 class Promise:
     def __init__(self, mType, bNum, b, val):
         self.mType = mType # String
-        self.bNum = bNum # Tuple: (depth, seqNum, pid)
-        self.b = b # Tuple: (depth, seqNum, pid)
+        self.bNum = bNum # BallotNum
+        self.b = b # BallotNum
         self.val = val # Block: op (list), hash (string), none (string)
     
     def getType(self):

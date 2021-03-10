@@ -1,8 +1,8 @@
 class OpRequest:
     def __init__(self, op, key, val="None"):
         self.op = op # String
-        self.key = key # Tuple: (depth, seqNum, pid)
-        self.val = val # Block: op (list), hash (string), none (string)
+        self.key = key # String
+        self.val = val # Dictionary
     
     def getOp(self):
         return self.op

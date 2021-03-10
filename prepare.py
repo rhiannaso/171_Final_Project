@@ -1,7 +1,9 @@
+from ballotNum import BallotNum
+
 class Prepare:
     def __init__(self, mType, bNum):
         self.mType = mType # String
-        self.bNum = bNum # Tuple: (depth, seqNum, pid)
+        self.bNum = bNum # BallotNum
     
     def getType(self):
         return self.mType

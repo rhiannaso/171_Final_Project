@@ -1,9 +1,10 @@
 from block import Block
+from ballotNum import BallotNum
 
 class Propose:
     def __init__(self, mType, bNum, val):
         self.mType = mType # String
-        self.bNum = bNum # Tuple: (depth, seqNum, pid)
+        self.bNum = bNum # BallotNum
         self.val = val # Block: op (list), hash (string), none (string)
     
     def getType(self):

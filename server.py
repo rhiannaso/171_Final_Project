@@ -8,6 +8,7 @@ from promise import Promise
 from accepted import Accepted
 from decide import Decide
 from opRequest import OpRequest
+from ballotNum import BallotNum
 from hashlib import sha256
 from time import sleep
 
@@ -22,15 +23,26 @@ delay = 5
 
 #Paxos Vars
 isLeader = False # Tracks if you're leader or not
-bNum = (0,0,0) # (depth, seqNum, pid)
-acceptNum = (0,0,0) # (depth, seqNum, pid)
+depth = 0 # Tracks length of blockchain
+seqNum = 0 # Tracks current sequence number
+#bNum = (0,0,0) # (depth, seqNum, pid)
+bNum = BallotNum(depth,seqNum,0)
+#acceptNum = (0,0,0) # (depth, seqNum, pid)
+acceptNum = BallotNum(0,0,0)
 acceptVal = None # aka bottom
 promises = 0 # Track num of promises
 promised = False
-receivedB = (0,0,0) # Track highest b received
+#receivedB = (0,0,0) # Track highest b received
+receivedB = BallotNum(0,0,0)
 myVal = None # Track value to propose (your block or received block with highest ballotNum)
 accepts = 0 # Track number of accepted
 decided = False
+paxosRun = False # Track if Paxos run is in progress or not
+
+# Locks
+queueLock = threading.Lock()
+bcLock = threading.Lock()
+dictLock = threading.Lock()
 
 #BlockChain Vars
 portal = {} # Key-value store
@@ -83,13 +95,15 @@ def printKV():
 
 def printQueue():
     global tempOp
-    while not tempOp.empty():
-        op = tempOp.get()
+    i = 0
+    while i < tempOp.qsize():
+        op = tempOp.queue[i]
         print("OP: ", op[0])
         print("KEY: ", op[1])
         if op[0] == "put":
             print("VAL: ", op[2])
         print("------")
+        i += 1
 
 def printChain():
     global blockchain
@@ -125,48 +139,24 @@ def write():
     f.write(bcString)
     f.flush()
 
-def inputBuild():
-    addToChain(
-    "put", 
-    "1234567", 
-    "1234567812345678123456781234567812345678123456781234567812345678", 
-    "0",
-    {"phone_number": "111-222-3333"}
-    )
-    addToChain(
-    "get", 
-    "7654321", 
-    "87654321ABCDEF9087654321ABCDEF9087654321ABCDEF9087654321ABCDEF90", 
-    "1"
-    )
-    addToChain(
-    "get", 
-    "5555555", 
-    "ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01ABCDEF01", 
-    "2"
-    )
-    write()
-    printChain()
-
-
 #Paxos Code____________________________________________
 
 # Helper Code_________________________________
-def compareBallots(b1, b2): # Return > 0 if b1 bigger, < 0 if b1 smaller
-    if b1[0] == b2[0]: # If depth is same
-        if b1[1] == b2[1]: # If seqNum is same
-            if b1[2] > b2[2]:
-                return 1
-            else:
-                return -1
-        elif b1[1] > b2[1]:
-            return 1
-        else:
-            return -1
-    elif b1[0] > b2[0]:
-        return 1
-    else:
-        return -1
+# def compareBallots(b1, b2): # Return > 0 if b1 bigger, < 0 if b1 smaller
+#     if b1[0] == b2[0]: # If depth is same
+#         if b1[1] == b2[1]: # If seqNum is same
+#             if b1[2] > b2[2]:
+#                 return 1
+#             else:
+#                 return -1
+#         elif b1[1] > b2[1]:
+#             return 1
+#         else:
+#             return -1
+#     elif b1[0] > b2[0]:
+#         return 1
+#     else:
+#         return -1
 
 def formatOp(op):
     opType = op[0]
@@ -192,13 +182,13 @@ def propose(): # Should already be elected
     msg = Propose("propose", bNum, newBlock)
     pMsg = pickle.dumps(msg)
     broadcastMsg(pMsg)
-    receivedB = (0,0,0) # Reset receivedB
+    receivedB = BallotNum(0,0,0) # Reset receivedB
     myVal = None # Reset myVal
     promised = False
 
 def accept(b, val):
-    global bNum
-    if b[0] >= bNum[0]:
+    global bNum, depth
+    if b.compare(bNum) >= 0: # If b is greater than or equal to ballotNum
         acceptNum = b
         acceptVal = val
         # Add to chain tentatively
@@ -209,6 +199,7 @@ def accept(b, val):
             addToChain(op[0], op[1], hp, nonce, "tentative", op[2])
         else:
             addToChain(op[0], op[1], hp, nonce, "tentative")
+        depth += 1 # Update depth
         write() # Write to file tentatively
         msg = Accepted("accepted", b, val)
         pMsg = pickle.dumps(msg)
@@ -247,7 +238,7 @@ def calcNonce(op):
 
 # Decide Code_________________________________
 def decide(b, val):
-    global accepts, decided
+    global accepts, decided, depth, paxosRun
     accepts = 0 # Reset accepts
     op = val.getOp()
     hp = val.getHashPtr()
@@ -257,19 +248,17 @@ def decide(b, val):
         addToChain(op[0], op[1], hp, nonce, "decided", op[2])
     else:
         addToChain(op[0], op[1], hp, nonce, "decided")
-    # Write to file
-    write()
-    # Update KV
-    cMsg = updateKV(op)
-    # Remove op from queue
-    tempOp.get()
-    # Send ack/value to client
-    replyClient(cMsg)
+    depth += 1 # Update depth
+    write() # Write to file
+    cMsg = updateKV(op) # Update KV
+    tempOp.get() # Remove op from queue
+    replyClient(cMsg) # Send ack/value to client
     # Broadcast decision to servers
     msg = Decide("decide", b, val)
     pMsg = pickle.dumps(msg)
     broadcastMsg(pMsg)
     decided = False
+    paxosRun = False
 
 def updateKV(op):
     global portal
@@ -306,8 +295,7 @@ def nonLDecide(b, val):
     else:
         addToChain(op[0], op[1], hp, nonce, "decided")
     write() # Rewrite file 
-    # Update KV
-    updateKV(op)
+    updateKV(op) # Update KV
 
 #Socket Code____________________________________________
 
@@ -396,7 +384,7 @@ def serverListener():
 
 #handles responses from the other SERVERS
 def serverResponse(sock, address):
-    global accepts, promises, myVal, receivedB, isLeader, decided, promised
+    global accepts, promises, myVal, receivedB, isLeader, decided, promised, paxosRun
     while True:
         #data = sock.recv(1024).decode("utf8")
         data = sock.recv(1024) # NOTE: if we want to receive any strings now, need to separately decode utf8
@@ -411,14 +399,17 @@ def serverResponse(sock, address):
                 val = dataMsg.getBlock()
                 # If val is None, do nothing (myVal is still your block)
                 if val is not None: # If val is not None and b > receivedB, set myVal = val
-                    if compareBallots(b, receivedB) > 0:
+                    if b.compare(receivedB) >= 0:
                         myVal = val
                 # Increment promises
                 promises += 1
                 if promises >= 2 and not promised: # Only need two more, already have own approval
                     promised = True
                     isLeader = True
-                    propose() # Is now leader
+                    while not tempOp.empty(): # Is now leader, run until queue is empty
+                        if not paxosRun:
+                            paxosRun = True # Ensure paxos only runs on one op at a time
+                            propose()
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
@@ -443,8 +434,12 @@ def serverResponse(sock, address):
                 else:
                     tmpOp = [op, key]
                 addToQueue(tmpOp)
-                isLeader = True
-                propose()
+                if not isLeader:
+                    isLeader = True
+                    while not tempOp.empty():
+                        if not paxosRun:
+                            paxosRun = True
+                            propose()
 
         if not data:
             sock.close()
@@ -461,7 +456,8 @@ if __name__ == '__main__':
     processId = int(sys.argv[1])
     master = "persist_"+sys.argv[1]+".txt"
 
-    rebuild() # In case of crash failure, rebuild chain
+    if os.path.isfile(master):
+        rebuild() # In case of crash failure, rebuild chain
 
     #reads config file for other client ports
     with open('./config.json') as configs:
