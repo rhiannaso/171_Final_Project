@@ -173,20 +173,14 @@ def formatOp(op):
 
 def sendPrepare():
     global bNum
-    prepMsg = Prepare('prepare', BallotNum(bNum.getDepth, bNum.getSeqNum+1, bNum.getPid))
+    ballot = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, bNum.getPid())
+    prepMsg = Prepare('prepare', ballot, MY_PORT)
     broadcastMsg(pickle.dumps(prepMsg))
-    #TODO add timeout for promise msgs
 
-def sendPromise():
+def sendPromise(id):
     promMsg = Promise('promise', bNum, acceptNum, acceptVal)
-    broadcastMsg(pickle.dumpts(promMsg))
-
-def promiseReceived():
-    promises+=1
-    if promises >= 2:
-        isLeader = True
-    
-    return isLeader
+    if SERVER_LINKS[int(id)]:
+        SERVERS[int(id)].sendall(pickle.dumps(promMsg))
 
 # Accept Code_________________________________
 def propose(): # Should already be elected
@@ -426,7 +420,7 @@ def serverResponse(sock, address):
                 bal = dataMsg.getBNum()
                 if bal.compare(bNum) > -1:
                     bNum = bal
-                    sendPromise(bal)
+                    sendPromise(dataMsg.getProcessId())
             if isinstance(dataMsg, Promise): # Receiving PROMISE
                 ballotNum = dataMsg.getBNum()
                 b = dataMsg.getB()
@@ -440,6 +434,7 @@ def serverResponse(sock, address):
                 if promises >= 2 and not promised: # Only need two more, already have own approval
                     promised = True
                     isLeader = True
+                    print("I am Leader")
                     while not tempOp.empty(): # Is now leader, run until queue is empty
                         if not paxosRun:
                             paxosRun = True # Ensure paxos only runs on one op at a time

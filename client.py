@@ -16,6 +16,8 @@ def processInput():
             connect()
         elif command == "broadcast":
             broadcast()
+        elif command == "leader":
+            SERVERS[FOCUS_PORT].sendall(pickle.dumps(Leader()))
         elif command == 'leader':
             SERVERS[FOCUS_PORT].sendall(Leader())
         elif 'swap' in command:
