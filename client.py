@@ -24,7 +24,7 @@ def processInput():
             swap(command[5:])
         elif command == "exit":
             SERVER_SOCK.close()
-            for sock in SERVERS: sock.close()
+            for sock in SERVERS: SERVERS[sock].close()
             os._exit(1)
         elif "operation" in command.lower():
             parsed = command.replace("(", "").replace(")", "")

@@ -318,7 +318,7 @@ def nonLDecide(b, val):
 def failProcess():
     MY_SOCK.close()
     for sock in SERVERS: 
-        sock.close()
+        SERVERS[sock].close()
     os._exit(1)
 
 def failLink(src, dest):
@@ -366,7 +366,7 @@ def processInput():
             sock.sendall(f"test".encode("utf8"))
         elif command == "exit":
             MY_SOCK.close()
-            for sock in SERVERS: sock.close()
+            for sock in SERVERS: SERVERS[sock].close()
             os._exit(1)
     return
 
