@@ -11,7 +11,7 @@ from opRequest import OpRequest
 from ballotNum import BallotNum
 from hashlib import sha256
 from time import sleep
-from leader import Leader
+from leader import Leader, UpdateLeader
 from links import FailLink, FixLink, TestMsg
 
 #Socket Vars
@@ -52,6 +52,7 @@ portal = {} # Key-value store
 tempOp = Queue(maxsize = 0) # Temporary operations
 blockchain = [] # Blockchain aka list of Block objects
 master = "" # File to write blockchain to
+currLeader = None
 
 #blockchain functions _______________________________________________
 def addToChain(op, key, hp, nonce, status, val="none"):
@@ -361,6 +362,8 @@ def processInput():
             printQueue()
         elif command == "broadcast":
             broadcast()
+        elif command == "currLeader":
+            print(currLeader)
         elif command == "clientBroadcast":
           for sock in CLIENTS:
             sock.sendall(f"test".encode("utf8"))
@@ -407,7 +410,7 @@ def serverListener():
 
 #handles responses from the other SERVERS
 def serverResponse(sock, address):
-    global accepts, promises, myVal, receivedB, isLeader, decided, promised, paxosRun, bNum
+    global accepts, promises, myVal, receivedB, isLeader, decided, promised, paxosRun, bNum, currLeader
     while True:
         #data = sock.recv(1024).decode("utf8")
         data = sock.recv(1024) # NOTE: if we want to receive any strings now, need to separately decode utf8
@@ -435,10 +438,14 @@ def serverResponse(sock, address):
                     promised = True
                     isLeader = True
                     print("I am Leader")
+                    currLeader = MY_PORT
+                    broadcastMsg(pickle.dumps(UpdateLeader(MY_PORT)))
                     while not tempOp.empty(): # Is now leader, run until queue is empty
                         if not paxosRun:
                             paxosRun = True # Ensure paxos only runs on one op at a time
                             propose()
+            if isinstance(dataMsg, UpdateLeader):
+                currLeader = dataMsg.getPort()
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
