@@ -14,3 +14,13 @@ class Leader:
 
     # def setProcessId(self, id):
     #     self.processId= id
+
+class UpdateLeader():
+    def __init__(self, port):
+        self.port = port
+    
+    def getPort(self):
+        return self.port
+    
+    def setPort(self, port):
+        self.port = port
