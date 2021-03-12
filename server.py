@@ -172,12 +172,19 @@ def formatOp(op):
         tmp += str(op[2])
     return tmp
 
+def printNum(b):
+    print("---------------------------")
+    print("DEPTH: ", str(b.getDepth()))
+    print("NUM: ", str(b.getSeqNum()))
+    print("PID: ", str(b.getPid()))
+    print("---------------------------")
+
 # Leader Election Code_________________________________
 
 def sendPrepare():
     global bNum
-    ballot = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, bNum.getPid())
-    prepMsg = Prepare('prepare', ballot, MY_PORT)
+    bNum = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, bNum.getPid())
+    prepMsg = Prepare('prepare', bNum, MY_PORT)
     broadcastMsg(pickle.dumps(prepMsg))
 
 def sendPromise(id):
@@ -206,7 +213,7 @@ def propose(): # Should already be elected
     promised = False
 
 def accept(b, val):
-    global bNum, depth
+    global bNum, depth, currLeader
     if b.compare(bNum) >= 0: # If b is greater than or equal to ballotNum
         acceptNum = b
         acceptVal = val
@@ -222,9 +229,8 @@ def accept(b, val):
         write() # Write to file tentatively
         msg = Accepted("accepted", b, val)
         pMsg = pickle.dumps(msg)
-        broadcastMsg(pMsg)
-        # TODO: send pMsg to just the leader
-        # send_to_leader(pMsg)
+        if SERVER_LINKS[int(currLeader)]: # Send accept to leader
+            SERVERS[int(currLeader)].sendall(pMsg)
 
 def calcHashPtr():
     global blockchain
@@ -257,6 +263,7 @@ def calcNonce(op):
 
 # Decide Code_________________________________
 def decide(b, val):
+    print("DECIDING")
     global accepts, decided, depth, paxosRun
     accepts = 0 # Reset accepts
     op = val.getOp()
@@ -298,8 +305,10 @@ def updateKV(op):
 
 def replyClient(msg, sock):
     #for sock in CLIENTS:
+    print(msg)
+    print(sock)
+    print("SENDING TO CLIENT")
     sock.sendall(f"{msg}".encode("utf8"))
-    # TODO: need to send back to particular client, not all clients
 
 def nonLDecide(b, val):
     global blockchain
@@ -419,23 +428,36 @@ def serverResponse(sock, address):
         if data:
             #print(data)
             dataMsg = pickle.loads(data)
+            # if isinstance(dataMsg, ClientOp): # Receiving forwarded request from SERVER
+            #     addToQueue(clientOp)
+            #     print("I'M THE LEADER AND GOT A FORWARDED REQUEST")
+            #     while not tempOp.empty() and isLeader:
+            #         if not paxosRun:
+            #             paxosRun = True
+            #             propose()
             if isinstance(dataMsg, OpRequest): # Receiving request from CLIENT
-                op = dataMsg.getOp()
-                key = dataMsg.getKey()
-                if op == "put":
-                    val = dataMsg.getVal()
-                    tmpOp = [op, key, val]
-                else:
-                    tmpOp = [op, key]
-                clientOp = ClientOp(sock, tmpOp)
-                addToQueue(clientOp)
+                # op = dataMsg.getOp()
+                # key = dataMsg.getKey()
+                # if op == "put":
+                #     val = dataMsg.getVal()
+                #     tmpOp = [op, key, val]
+                # else:
+                #     tmpOp = [op, key]
+                #clientOp = ClientOp(sock, tmpOp)
+                dataMsg.setSock(sock)
                 if not isLeader: # If current server is not the leader
                     if currLeader is None: # If not leader and there is no leader
+                        print("ELECT ME")
+                        addToQueue(dataMsg)
                         sendPrepare()
-                    else:
-                        pass # TODO: Forward opRequest to actual leader
+                    else: # Forward opRequest to actual leader
+                        print("SEND TO LEADER")
+                        if SERVER_LINKS[int(currLeader)]:
+                            SERVERS[int(currLeader)].sendall(data)
                 else: # If current server is already the leader
-                    while not tempOp.empty():
+                    addToQueue(dataMsg)
+                    print("I'M THE LEADER")
+                    while not tempOp.empty() and isLeader:
                         if not paxosRun:
                             paxosRun = True
                             propose()
@@ -462,7 +484,7 @@ def serverResponse(sock, address):
                     print("I am Leader")
                     currLeader = MY_PORT
                     broadcastMsg(pickle.dumps(UpdateLeader(MY_PORT)))
-                    while not tempOp.empty(): # Is now leader, run until queue is empty
+                    while not tempOp.empty() and isLeader: # Is now leader, run until queue is empty
                         if not paxosRun:
                             paxosRun = True # Ensure paxos only runs on one op at a time
                             propose()
@@ -472,7 +494,7 @@ def serverResponse(sock, address):
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
                 accept(b, val)
-            if isinstance(dataMsg, Accepted) and isLeader: # Receiving ACCEPTED
+            if isinstance(dataMsg, Accepted): # Receiving ACCEPTED
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
                 accepts += 1

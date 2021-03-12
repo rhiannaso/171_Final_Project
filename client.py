@@ -57,6 +57,7 @@ def connect():
         address = (socket.gethostname(), id)
         sock.connect(address)
         SERVERS[id] = sock
+        print(sock)
         threading.Thread(target=clientRequest, args=(sock,id)).start()
         if id != FOCUS_PORT:
             print("Connected to Server with Port " + str(id))
@@ -69,7 +70,9 @@ def connect():
 def clientRequest(sock, id):
     while True:
         data = sock.recv(1024).decode("utf8")
-        if(data and id == FOCUS_PORT):
+        # if(data and id == FOCUS_PORT):
+        #     print(data)
+        if data:
             print(data)
         if not data:
             break
