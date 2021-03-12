@@ -9,6 +9,7 @@ from accepted import Accepted
 from decide import Decide
 from opRequest import OpRequest
 from ballotNum import BallotNum
+from clientOp import ClientOp
 from hashlib import sha256
 from time import sleep
 
@@ -97,7 +98,7 @@ def printQueue():
     global tempOp
     i = 0
     while i < tempOp.qsize():
-        op = tempOp.queue[i]
+        op = tempOp.queue[i].getFullOp()
         print("OP: ", op[0])
         print("KEY: ", op[1])
         if op[0] == "put":
@@ -170,7 +171,7 @@ def formatOp(op):
 def propose(): # Should already be elected
     global tempOp, bNum, promises, receivedB, myVal, promised
     promises = 0 # Reset promises
-    opBlock = tempOp.queue[0] # Access first op in queue
+    opBlock = tempOp.queue[0].getFullOp() # Access first op in queue
     op = formatOp(opBlock) # Concatenate op together
     nonce = calcNonce(op) # Calculate nonce
     hashVal = calcHashPtr()
@@ -251,8 +252,8 @@ def decide(b, val):
     depth += 1 # Update depth
     write() # Write to file
     cMsg = updateKV(op) # Update KV
-    tempOp.get() # Remove op from queue
-    replyClient(cMsg) # Send ack/value to client
+    cOp = tempOp.get() # Remove op from queue
+    replyClient(cMsg, cOp.getSock()) # Send ack/value to client
     # Broadcast decision to servers
     msg = Decide("decide", b, val)
     pMsg = pickle.dumps(msg)
@@ -277,9 +278,9 @@ def updateKV(op):
             msg = v
     return msg
 
-def replyClient(msg):
-    for sock in CLIENTS:
-        sock.sendall(f"{msg}".encode("utf8"))
+def replyClient(msg, sock):
+    #for sock in CLIENTS:
+    sock.sendall(f"{msg}".encode("utf8"))
     # TODO: need to send back to particular client, not all clients
 
 def nonLDecide(b, val):
@@ -433,13 +434,13 @@ def serverResponse(sock, address):
                     tmpOp = [op, key, val]
                 else:
                     tmpOp = [op, key]
-                addToQueue(tmpOp)
-                if not isLeader:
-                    isLeader = True
-                    while not tempOp.empty():
-                        if not paxosRun:
-                            paxosRun = True
-                            propose()
+                clientOp = ClientOp(sock, tmpOp)
+                addToQueue(clientOp)
+                isLeader = True
+                while not tempOp.empty():
+                    if not paxosRun:
+                        paxosRun = True
+                        propose()
 
         if not data:
             sock.close()
