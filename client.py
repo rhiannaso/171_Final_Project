@@ -1,5 +1,6 @@
 import socket, sys, threading, os, queue, time, json, pickle
 from opRequest import OpRequest
+from leader import Leader
 
 IP = "127.0.0.1"
 FOCUS_PORT = None
@@ -15,11 +16,15 @@ def processInput():
             connect()
         elif command == "broadcast":
             broadcast()
+        elif command == "leader":
+            SERVERS[FOCUS_PORT].sendall(pickle.dumps(Leader()))
+        elif command == 'leader':
+            SERVERS[FOCUS_PORT].sendall(Leader())
         elif 'swap' in command:
             swap(command[5:])
         elif command == "exit":
             SERVER_SOCK.close()
-            for sock in SERVERS: sock.close()
+            for sock in SERVERS: SERVERS[sock].close()
             os._exit(1)
         elif "operation" in command.lower():
             parsed = command.replace("(", "").replace(")", "")
