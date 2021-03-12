@@ -1,4 +1,5 @@
 import socket, sys, threading, os, queue, time, json, pickle
+from queue import Queue
 from opRequest import OpRequest
 from leader import Leader
 
@@ -7,6 +8,8 @@ FOCUS_PORT = None
 SERVER_PORTS = []
 SERVERS = {}
 SERVER_SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+clientOp = Queue(maxsize = 0) # Operations to send
+receivedResponse = False
 
 #takes stdin commands
 def processInput():
@@ -36,10 +39,24 @@ def processInput():
             if op == "put":
                 val = vals[2].strip()
                 req = OpRequest(op, key, val)
-            msg = pickle.dumps(req)
-            SERVERS[FOCUS_PORT].sendall(msg)
+            clientOp.put(req)
+            if clientOp.qsize() == 1: # Only spawn thread if first operation
+                threading.Thread(target=handleOp).start()
+            #msg = pickle.dumps(req)
+            #SERVERS[FOCUS_PORT].sendall(msg)
 
     return
+
+def handleOp():
+    global clientOp, receivedResponse
+    if clientOp.qsize() == 1: # If first op in queue, don't need to wait for response
+        receivedResponse = True
+    while not clientOp.empty():
+        if receivedResponse and not clientOp.empty():
+            req = clientOp.queue[0]
+            msg = pickle.dumps(req)
+            SERVERS[FOCUS_PORT].sendall(msg)
+            receivedResponse = False
 
 def swap(PORT):
     global FOCUS_PORT
@@ -57,23 +74,31 @@ def connect():
         address = (socket.gethostname(), id)
         sock.connect(address)
         SERVERS[id] = sock
-        print(sock)
         threading.Thread(target=clientRequest, args=(sock,id)).start()
         if id != FOCUS_PORT:
             print("Connected to Server with Port " + str(id))
         elif id == FOCUS_PORT:
             print("Connect with Primary Server " + str(id))
 
-    
-
 #where code waits to receive from server
 def clientRequest(sock, id):
+    global receivedResponse
     while True:
         data = sock.recv(1024).decode("utf8")
-        # if(data and id == FOCUS_PORT):
+        if(data and id == FOCUS_PORT):
+            if "leader" in data: # Changing leaders and forwarding
+                server_id = data.split("|")[1]
+                print(server_id)
+                swap(server_id)
+                req = clientOp.queue[0]
+                msg = pickle.dumps(req)
+                SERVERS[FOCUS_PORT].sendall(msg)
+            else: # Getting response from server
+                clientOp.get() # Pop off operation
+                receivedResponse = True
+                print(data)
+        # if data:
         #     print(data)
-        if data:
-            print(data)
         if not data:
             break
     return

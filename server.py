@@ -23,7 +23,7 @@ SERVER_PORTS = []
 SERVERS = {}
 SERVER_LINKS = {}
 CLIENTS = []
-delay = 5
+delay = 10
 
 #Paxos Vars
 isLeader = False # Tracks if you're leader or not
@@ -136,7 +136,17 @@ def rebuild():
         fullOp = elems[0].strip("<>").split("|") # Strip op surroundings
         newBlock = Block(fullOp, elems[1], elems[2], elems[3]) # Reconstruct block
         blockchain.append(newBlock) # Add block to blockchain
-    #printChain()
+    rebuildKV()
+
+def rebuildKV():
+    global blockchain, portal
+    for block in blockchain:
+        op = block.getOp()
+        if op[0] == "put":
+            key = op[1]
+            val = op[2]
+            portal[key] = val
+    #printKV()
 
 def write():
     global master
@@ -263,7 +273,6 @@ def calcNonce(op):
 
 # Decide Code_________________________________
 def decide(b, val):
-    print("DECIDING")
     global accepts, decided, depth, paxosRun
     accepts = 0 # Reset accepts
     op = val.getOp()
@@ -304,10 +313,6 @@ def updateKV(op):
     return msg
 
 def replyClient(msg, sock):
-    #for sock in CLIENTS:
-    print(msg)
-    print(sock)
-    print("SENDING TO CLIENT")
     sock.sendall(f"{msg}".encode("utf8"))
 
 def nonLDecide(b, val):
@@ -452,8 +457,8 @@ def serverResponse(sock, address):
                         sendPrepare()
                     else: # Forward opRequest to actual leader
                         print("SEND TO LEADER")
-                        if SERVER_LINKS[int(currLeader)]:
-                            SERVERS[int(currLeader)].sendall(data)
+                        msg = f"leader|{currLeader}"
+                        sock.sendall(msg.encode("utf8"))
                 else: # If current server is already the leader
                     addToQueue(dataMsg)
                     print("I'M THE LEADER")
@@ -467,6 +472,7 @@ def serverResponse(sock, address):
                 bal = dataMsg.getBNum()
                 if bal.compare(bNum) > -1:
                     bNum = bal
+                    isLeader = False # Ensure that you're not leader if you're promising
                     sendPromise(dataMsg.getProcessId())
             if isinstance(dataMsg, Promise): # Receiving PROMISE
                 ballotNum = dataMsg.getBNum()
@@ -490,6 +496,11 @@ def serverResponse(sock, address):
                             propose()
             if isinstance(dataMsg, UpdateLeader):
                 currLeader = dataMsg.getPort()
+                if not tempOp.empty() and not isLeader:
+                    print("FORWARD TO ACTUAL LEADER")
+                    clientSock = tempOp.queue[0].getSock()
+                    msg = f"leader|{currLeader}"
+                    clientSock.sendall(msg.encode("utf8"))
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
