@@ -9,6 +9,7 @@ from accepted import Accepted
 from decide import Decide
 from opRequest import OpRequest
 from ballotNum import BallotNum
+from clientOp import ClientOp
 from hashlib import sha256
 from time import sleep
 from leader import Leader, UpdateLeader
@@ -22,10 +23,11 @@ SERVER_PORTS = []
 SERVERS = {}
 SERVER_LINKS = {}
 CLIENTS = []
-delay = 5
+delay = 10
 
 #Paxos Vars
 isLeader = False # Tracks if you're leader or not
+currLeader = None # Tracks current leader by pid
 depth = 0 # Tracks length of blockchain
 seqNum = 0 # Tracks current sequence number
 #bNum = (0,0,0) # (depth, seqNum, pid)
@@ -101,7 +103,7 @@ def printQueue():
     global tempOp
     i = 0
     while i < tempOp.qsize():
-        op = tempOp.queue[i]
+        op = tempOp.queue[i].getFullOp()
         print("OP: ", op[0])
         print("KEY: ", op[1])
         if op[0] == "put":
@@ -134,7 +136,17 @@ def rebuild():
         fullOp = elems[0].strip("<>").split("|") # Strip op surroundings
         newBlock = Block(fullOp, elems[1], elems[2], elems[3]) # Reconstruct block
         blockchain.append(newBlock) # Add block to blockchain
-    #printChain()
+    rebuildKV()
+
+def rebuildKV():
+    global blockchain, portal
+    for block in blockchain:
+        op = block.getOp()
+        if op[0] == "put":
+            key = op[1]
+            val = op[2]
+            portal[key] = val
+    #printKV()
 
 def write():
     global master
@@ -170,12 +182,19 @@ def formatOp(op):
         tmp += str(op[2])
     return tmp
 
+def printNum(b):
+    print("---------------------------")
+    print("DEPTH: ", str(b.getDepth()))
+    print("NUM: ", str(b.getSeqNum()))
+    print("PID: ", str(b.getPid()))
+    print("---------------------------")
+
 # Leader Election Code_________________________________
 
 def sendPrepare():
     global bNum
-    ballot = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, bNum.getPid())
-    prepMsg = Prepare('prepare', ballot, MY_PORT)
+    bNum = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, bNum.getPid())
+    prepMsg = Prepare('prepare', bNum, MY_PORT)
     broadcastMsg(pickle.dumps(prepMsg))
 
 def sendPromise(id):
@@ -187,7 +206,7 @@ def sendPromise(id):
 def propose(): # Should already be elected
     global tempOp, bNum, promises, receivedB, myVal, promised
     promises = 0 # Reset promises
-    opBlock = tempOp.queue[0] # Access first op in queue
+    opBlock = tempOp.queue[0].getFullOp() # Access first op in queue
     op = formatOp(opBlock) # Concatenate op together
     nonce = calcNonce(op) # Calculate nonce
     hashVal = calcHashPtr()
@@ -204,7 +223,7 @@ def propose(): # Should already be elected
     promised = False
 
 def accept(b, val):
-    global bNum, depth
+    global bNum, depth, currLeader
     if b.compare(bNum) >= 0: # If b is greater than or equal to ballotNum
         acceptNum = b
         acceptVal = val
@@ -220,9 +239,8 @@ def accept(b, val):
         write() # Write to file tentatively
         msg = Accepted("accepted", b, val)
         pMsg = pickle.dumps(msg)
-        broadcastMsg(pMsg)
-        # TODO: send pMsg to just the leader
-        # send_to_leader(pMsg)
+        if SERVER_LINKS[int(currLeader)]: # Send accept to leader
+            SERVERS[int(currLeader)].sendall(pMsg)
 
 def calcHashPtr():
     global blockchain
@@ -268,8 +286,8 @@ def decide(b, val):
     depth += 1 # Update depth
     write() # Write to file
     cMsg = updateKV(op) # Update KV
-    tempOp.get() # Remove op from queue
-    replyClient(cMsg) # Send ack/value to client
+    cOp = tempOp.get() # Remove op from queue
+    replyClient(cMsg, cOp.getSock()) # Send ack/value to client
     # Broadcast decision to servers
     msg = Decide("decide", b, val)
     pMsg = pickle.dumps(msg)
@@ -294,10 +312,8 @@ def updateKV(op):
             msg = v
     return msg
 
-def replyClient(msg):
-    for sock in CLIENTS:
-        sock.sendall(f"{msg}".encode("utf8"))
-    # TODO: need to send back to particular client, not all clients
+def replyClient(msg, sock):
+    sock.sendall(f"{msg}".encode("utf8"))
 
 def nonLDecide(b, val):
     global blockchain
@@ -417,12 +433,46 @@ def serverResponse(sock, address):
         if data:
             #print(data)
             dataMsg = pickle.loads(data)
+            # if isinstance(dataMsg, ClientOp): # Receiving forwarded request from SERVER
+            #     addToQueue(clientOp)
+            #     print("I'M THE LEADER AND GOT A FORWARDED REQUEST")
+            #     while not tempOp.empty() and isLeader:
+            #         if not paxosRun:
+            #             paxosRun = True
+            #             propose()
+            if isinstance(dataMsg, OpRequest): # Receiving request from CLIENT
+                # op = dataMsg.getOp()
+                # key = dataMsg.getKey()
+                # if op == "put":
+                #     val = dataMsg.getVal()
+                #     tmpOp = [op, key, val]
+                # else:
+                #     tmpOp = [op, key]
+                #clientOp = ClientOp(sock, tmpOp)
+                dataMsg.setSock(sock)
+                if not isLeader: # If current server is not the leader
+                    if currLeader is None: # If not leader and there is no leader
+                        print("ELECT ME")
+                        addToQueue(dataMsg)
+                        sendPrepare()
+                    else: # Forward opRequest to actual leader
+                        print("SEND TO LEADER")
+                        msg = f"leader|{currLeader}"
+                        sock.sendall(msg.encode("utf8"))
+                else: # If current server is already the leader
+                    addToQueue(dataMsg)
+                    print("I'M THE LEADER")
+                    while not tempOp.empty() and isLeader:
+                        if not paxosRun:
+                            paxosRun = True
+                            propose()
             if isinstance(dataMsg, Leader): # Receiving LEADER
                 sendPrepare()
             if isinstance(dataMsg, Prepare): # Receiving PREPARE
                 bal = dataMsg.getBNum()
                 if bal.compare(bNum) > -1:
                     bNum = bal
+                    isLeader = False # Ensure that you're not leader if you're promising
                     sendPromise(dataMsg.getProcessId())
             if isinstance(dataMsg, Promise): # Receiving PROMISE
                 ballotNum = dataMsg.getBNum()
@@ -440,17 +490,22 @@ def serverResponse(sock, address):
                     print("I am Leader")
                     currLeader = MY_PORT
                     broadcastMsg(pickle.dumps(UpdateLeader(MY_PORT)))
-                    while not tempOp.empty(): # Is now leader, run until queue is empty
+                    while not tempOp.empty() and isLeader: # Is now leader, run until queue is empty
                         if not paxosRun:
                             paxosRun = True # Ensure paxos only runs on one op at a time
                             propose()
             if isinstance(dataMsg, UpdateLeader):
                 currLeader = dataMsg.getPort()
+                if not tempOp.empty() and not isLeader:
+                    print("FORWARD TO ACTUAL LEADER")
+                    clientSock = tempOp.queue[0].getSock()
+                    msg = f"leader|{currLeader}"
+                    clientSock.sendall(msg.encode("utf8"))
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
                 accept(b, val)
-            if isinstance(dataMsg, Accepted) and isLeader: # Receiving ACCEPTED
+            if isinstance(dataMsg, Accepted): # Receiving ACCEPTED
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
                 accepts += 1
@@ -461,21 +516,6 @@ def serverResponse(sock, address):
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
                 nonLDecide(b, val) # Decide as a participant
-            if isinstance(dataMsg, OpRequest): # Receiving request from CLIENT
-                op = dataMsg.getOp()
-                key = dataMsg.getKey()
-                if op == "put":
-                    val = dataMsg.getVal()
-                    tmpOp = [op, key, val]
-                else:
-                    tmpOp = [op, key]
-                addToQueue(tmpOp)
-                if not isLeader:
-                    isLeader = True
-                    while not tempOp.empty():
-                        if not paxosRun:
-                            paxosRun = True
-                            propose()
             if isinstance(dataMsg, FailLink):
                 SERVER_LINKS[int(dataMsg.getSrc())] = False
             if isinstance(dataMsg, FixLink):

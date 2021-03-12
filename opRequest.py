@@ -1,8 +1,17 @@
+import socket
+
 class OpRequest:
     def __init__(self, op, key, val="None"):
         self.op = op # String
         self.key = key # String
         self.val = val # Dictionary
+        self.sock = None
+
+    def getFullOp(self):
+        if self.op == "put":
+            return [self.op, self.key, self.val]
+        else:
+            return [self.op, self.key]
     
     def getOp(self):
         return self.op
@@ -21,3 +30,9 @@ class OpRequest:
 
     def setVal(self, val):
         self.val = val
+
+    def getSock(self):
+        return self.sock
+
+    def setSock(self, sock):
+        self.sock = sock
