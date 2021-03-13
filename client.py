@@ -2,6 +2,8 @@ import socket, sys, threading, os, queue, time, json, pickle
 from queue import Queue
 from opRequest import OpRequest
 from leader import Leader
+import time
+import random
 
 IP = "127.0.0.1"
 FOCUS_PORT = None
@@ -10,6 +12,7 @@ SERVERS = {}
 SERVER_SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 clientOp = Queue(maxsize = 0) # Operations to send
 receivedResponse = False
+timerActive = False
 
 #takes stdin commands
 def processInput():
@@ -56,6 +59,10 @@ def handleOp():
             req = clientOp.queue[0]
             msg = pickle.dumps(req)
             SERVERS[FOCUS_PORT].sendall(msg)
+
+            
+            threading.Thread(target=timer, args=()).start()
+
             receivedResponse = False
 
 def swap(PORT):
@@ -80,11 +87,41 @@ def connect():
         elif id == FOCUS_PORT:
             print("Connect with Primary Server " + str(id))
 
+def timer():
+    global timerActive
+    timerActive = True
+    timeLeft = 60
+    while timeLeft > 0:
+        if timerActive:
+            print(timeLeft)
+            time.sleep(1)
+            timeLeft -= 1
+        else:
+            return
+    
+    timerActive = False
+    req = clientOp.queue[0]
+    msg = pickle.dumps(req)
+    #random port swap
+    print("swapping")
+    swap(randomPort())
+    SERVERS[FOCUS_PORT].sendall(msg)
+    threading.Thread(target=timer, args=()).start()
+
+
+def randomPort():
+    keys = list(SERVERS.keys())
+    while(True):
+        newPort = keys[random.randrange(len(keys))]
+        if newPort != FOCUS_PORT:
+            return newPort
+
 #where code waits to receive from server
 def clientRequest(sock, id):
-    global receivedResponse
+    global receivedResponse, timerActive
     while True:
         data = sock.recv(1024).decode("utf8")
+        timerActive = False
         if(data and id == FOCUS_PORT):
             if "leader" in data: # Changing leaders and forwarding
                 server_id = data.split("|")[1]
@@ -93,6 +130,9 @@ def clientRequest(sock, id):
                 req = clientOp.queue[0]
                 msg = pickle.dumps(req)
                 SERVERS[FOCUS_PORT].sendall(msg)
+
+                timerActive = True
+                threading.Thread(target=timer, args=()).start()
             else: # Getting response from server
                 clientOp.get() # Pop off operation
                 receivedResponse = True
