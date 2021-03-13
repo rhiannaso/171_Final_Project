@@ -13,7 +13,7 @@ from clientOp import ClientOp
 from hashlib import sha256
 from time import sleep
 from leader import Leader, UpdateLeader
-from links import FailLink, FixLink, TestMsg
+from links import FailLink, FixLink, TestMsg, FailProcess
 
 #Socket Vars
 IP = "127.0.0.1"
@@ -31,7 +31,7 @@ currLeader = None # Tracks current leader by pid
 depth = 0 # Tracks length of blockchain
 seqNum = 0 # Tracks current sequence number
 #bNum = (0,0,0) # (depth, seqNum, pid)
-bNum = BallotNum(depth,seqNum,0)
+bNum = BallotNum(depth,seqNum,processId)
 #acceptNum = (0,0,0) # (depth, seqNum, pid)
 acceptNum = BallotNum(0,0,0)
 acceptVal = None # aka bottom
@@ -215,7 +215,7 @@ def propose(): # Should already be elected
         newBlock = Block(opBlock, hashVal, nonce, "tentative")
     else: # If there was a val(s) that was not bottom, use one with highest b
         newBlock = myVal
-    msg = Propose("propose", bNum, newBlock)
+    msg = Propose("propose", bNum, newBlock, currLeader)
     pMsg = pickle.dumps(msg)
     broadcastMsg(pMsg)
     receivedB = BallotNum(0,0,0) # Reset receivedB
@@ -254,6 +254,7 @@ def calcHashPtr():
         else: # If previous block was the first block, hash will be None so don't concatenate
             concat = op+nonce
         hashPtr = sha256(concat.encode()) # Calculate hash
+        print("Hash Pointer: ", hashPtr.hexdigest())
         return hashPtr.hexdigest()
     else: # If first block in blockchain
         return None
@@ -269,6 +270,8 @@ def calcNonce(op):
             num = int(h[-1])
             if num <= 2 and num >= 0: # And between 0 and 2
                 break
+    print("Calculated hash: ", h)
+    print("Calculated nonce: ", nonce)
     return nonce
 
 # Decide Code_________________________________
@@ -335,18 +338,19 @@ def nonLDecide(b, val):
 def failProcess():
     MY_SOCK.close()
     for sock in SERVERS: 
+        SERVERS[sock].sendall(pickle.dumps(FailProcess(int(MY_PORT))))
         SERVERS[sock].close()
     os._exit(1)
 
 def failLink(src, dest):
     SERVER_LINKS[int(dest)] = False
     SERVERS[int(dest)].sendall(pickle.dumps(FailLink(src, dest)))
-    return # TODO: stub
+    return
 
 def fixLink(src, dest):
     SERVER_LINKS[int(dest)] = True
     SERVERS[int(dest)].sendall(pickle.dumps(FixLink(src, dest)))
-    return # TODO: stub
+    return
 
 #takes stdin commands
 def processInput():
@@ -433,22 +437,7 @@ def serverResponse(sock, address):
         if data:
             #print(data)
             dataMsg = pickle.loads(data)
-            # if isinstance(dataMsg, ClientOp): # Receiving forwarded request from SERVER
-            #     addToQueue(clientOp)
-            #     print("I'M THE LEADER AND GOT A FORWARDED REQUEST")
-            #     while not tempOp.empty() and isLeader:
-            #         if not paxosRun:
-            #             paxosRun = True
-            #             propose()
             if isinstance(dataMsg, OpRequest): # Receiving request from CLIENT
-                # op = dataMsg.getOp()
-                # key = dataMsg.getKey()
-                # if op == "put":
-                #     val = dataMsg.getVal()
-                #     tmpOp = [op, key, val]
-                # else:
-                #     tmpOp = [op, key]
-                #clientOp = ClientOp(sock, tmpOp)
                 dataMsg.setSock(sock)
                 if not isLeader: # If current server is not the leader
                     if currLeader is None: # If not leader and there is no leader
@@ -496,14 +485,16 @@ def serverResponse(sock, address):
                             propose()
             if isinstance(dataMsg, UpdateLeader):
                 currLeader = dataMsg.getPort()
-                if not tempOp.empty() and not isLeader:
+                while not tempOp.empty() and not isLeader: # Empty out queue if not leader
                     print("FORWARD TO ACTUAL LEADER")
-                    clientSock = tempOp.queue[0].getSock()
+                    clientSock = tempOp.get().getSock()
                     msg = f"leader|{currLeader}"
                     clientSock.sendall(msg.encode("utf8"))
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
+                if currLeader is None:
+                    currLeader = dataMsg.getCurrLeader()
                 accept(b, val)
             if isinstance(dataMsg, Accepted): # Receiving ACCEPTED
                 b = dataMsg.getBNum()
@@ -520,6 +511,8 @@ def serverResponse(sock, address):
                 SERVER_LINKS[int(dataMsg.getSrc())] = False
             if isinstance(dataMsg, FixLink):
                 SERVER_LINKS[int(dataMsg.getSrc())] = True
+            if isinstance(dataMsg, FailProcess):
+                SERVERS.pop(int(dataMsg.getPort()), None)
             if isinstance(dataMsg, TestMsg):
                 print(dataMsg.getMsg())
 
@@ -537,6 +530,7 @@ def serverRequest():
 if __name__ == '__main__':
     processId = int(sys.argv[1])
     master = "persist_"+sys.argv[1]+".txt"
+    bNum = BallotNum(depth,seqNum,processId)
 
     if os.path.isfile(master):
         rebuild() # In case of crash failure, rebuild chain

@@ -1,3 +1,13 @@
+class FailProcess:
+    def __init__(self, port):
+        self.port = port
+
+    def setPort(self, port):
+        self.port = port
+
+    def getPort(self):
+        return self.port
+
 class FailLink:
     def __init__(self, src, dest):
         self.mType = 'failLink'
