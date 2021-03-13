@@ -38,10 +38,10 @@ def processInput():
             vals = parsed.split(",")
             op = vals[0].strip()
             key = vals[1].strip()
-            req = OpRequest(op, key)
+            req = OpRequest(op, key, False)
             if op == "put":
                 val = vals[2].strip()
-                req = OpRequest(op, key, val)
+                req = OpRequest(op, key, False, val)
             clientOp.put(req)
             if clientOp.qsize() == 1: # Only spawn thread if first operation
                 threading.Thread(target=handleOp).start()
@@ -101,6 +101,7 @@ def timer():
     
     timerActive = False
     req = clientOp.queue[0]
+    req.setResetLeader(True)
     msg = pickle.dumps(req)
     #random port swap
     print("swapping")
