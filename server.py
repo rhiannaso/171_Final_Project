@@ -439,6 +439,8 @@ def serverResponse(sock, address):
             dataMsg = pickle.loads(data)
             if isinstance(dataMsg, OpRequest): # Receiving request from CLIENT
                 dataMsg.setSock(sock)
+                if(dataMsg.getResetLeader()):
+                    currLeader = None
                 if not isLeader: # If current server is not the leader
                     if currLeader is None: # If not leader and there is no leader
                         print("ELECT ME")
