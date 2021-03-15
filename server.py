@@ -194,6 +194,7 @@ def printNum(b):
 def sendPrepare():
     global bNum
     bNum = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, bNum.getPid())
+    printNum(bNum)
     prepMsg = Prepare('prepare', bNum, MY_PORT)
     print("Sending prepare messages.")
     broadcastMsg(pickle.dumps(prepMsg))
@@ -202,6 +203,7 @@ def sendPromise(id):
     promMsg = Promise('promise', bNum, acceptNum, acceptVal)
     print("Sending promise back.")
     if SERVER_LINKS[int(id)]:
+        sleep(delay)
         SERVERS[int(id)].sendall(pickle.dumps(promMsg))
 
 # Accept Code_________________________________
@@ -244,6 +246,7 @@ def accept(b, val):
         pMsg = pickle.dumps(msg)
         print(f"Sending accept to current leader: {currLeader}")
         if SERVER_LINKS[int(currLeader)]: # Send accept to leader
+            sleep(delay)
             SERVERS[int(currLeader)].sendall(pMsg)
 
 def calcHashPtr():
@@ -321,6 +324,7 @@ def updateKV(op):
     return msg
 
 def replyClient(msg, sock):
+    sleep(delay)
     sock.sendall(f"{msg}".encode("utf8"))
 
 def nonLDecide(b, val):
@@ -341,19 +345,23 @@ def nonLDecide(b, val):
 #Socket Code____________________________________________
 
 def failProcess():
-    MY_SOCK.close()
+    #MY_SOCK.close()
+    sleep(delay)
     for sock in SERVERS: 
         SERVERS[sock].sendall(pickle.dumps(FailProcess(int(MY_PORT))))
         SERVERS[sock].close()
+    MY_SOCK.close()
     os._exit(1)
 
 def failLink(src, dest):
     SERVER_LINKS[int(dest)] = False
+    sleep(delay)
     SERVERS[int(dest)].sendall(pickle.dumps(FailLink(src, dest)))
     return
 
 def fixLink(src, dest):
     SERVER_LINKS[int(dest)] = True
+    sleep(delay)
     SERVERS[int(dest)].sendall(pickle.dumps(FixLink(src, dest)))
     return
 
@@ -450,11 +458,12 @@ def serverResponse(sock, address):
                 if not isLeader: # If current server is not the leader
                     if currLeader is None: # If not leader and there is no leader
                         print("Trying to get elected.")
-                        addToQueue(dataMsg)
+                        addToQueue(dataMsg) # TODO: Figure out when to add to queue to deal with concurrent leader requests
                         sendPrepare()
                     else: # Forward opRequest to actual leader
                         print("Forward request to leader.")
                         msg = f"leader|{currLeader}"
+                        sleep(delay)
                         sock.sendall(msg.encode("utf8"))
                 else: # If current server is already the leader
                     addToQueue(dataMsg)
