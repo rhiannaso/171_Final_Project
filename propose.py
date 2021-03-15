@@ -2,10 +2,11 @@ from block import Block
 from ballotNum import BallotNum
 
 class Propose:
-    def __init__(self, mType, bNum, val):
+    def __init__(self, mType, bNum, val, currLeader):
         self.mType = mType # String
         self.bNum = bNum # BallotNum
         self.val = val # Block: op (list), hash (string), none (string)
+        self.currLeader = currLeader
     
     def getType(self):
         return self.mType
@@ -24,3 +25,9 @@ class Propose:
 
     def setBlock(self, val):
         self.val = val
+
+    def getCurrLeader(self):
+        return self.currLeader
+
+    def setcurrLeader(self, currLeader):
+        self.currLeader = currLeader
