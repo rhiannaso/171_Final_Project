@@ -1,11 +1,18 @@
 import socket
 
 class OpRequest:
-    def __init__(self, op, key, val="None"):
+    def __init__(self, op, key, resetLeader, val="None"):
         self.op = op # String
         self.key = key # String
         self.val = val # Dictionary
         self.sock = None
+        self.resetLeader = resetLeader
+    
+    def getResetLeader(self):
+        return self.resetLeader
+    
+    def setResetLeader(self, resetLeader):
+        self.resetLeader = resetLeader
 
     def getFullOp(self):
         if self.op == "put":
