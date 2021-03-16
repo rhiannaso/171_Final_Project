@@ -23,7 +23,7 @@ SERVER_PORTS = []
 SERVERS = {}
 SERVER_LINKS = {}
 CLIENTS = []
-delay = 10
+delay = 5
 
 #Paxos Vars
 isLeader = False # Tracks if you're leader or not
@@ -194,7 +194,6 @@ def printNum(b):
 def sendPrepare():
     global bNum
     bNum = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, bNum.getPid())
-    printNum(bNum)
     prepMsg = Prepare('prepare', bNum, MY_PORT)
     print("Sending prepare messages.")
     broadcastMsg(pickle.dumps(prepMsg))
@@ -208,7 +207,7 @@ def sendPromise(id):
 
 # Accept Code_________________________________
 def propose(): # Should already be elected
-    global tempOp, bNum, promises, receivedB, myVal, promised
+    global tempOp, bNum, promises, receivedB, myVal, promised, currLeader
     promises = 0 # Reset promises
     opBlock = tempOp.queue[0].getFullOp() # Access first op in queue
     op = formatOp(opBlock) # Concatenate op together
@@ -245,8 +244,11 @@ def accept(b, val):
         msg = Accepted("accepted", b, val)
         pMsg = pickle.dumps(msg)
         print(f"Sending accept to current leader: {currLeader}")
+        print(SERVERS[int(currLeader)])
+        print(SERVER_LINKS[int(currLeader)])
         if SERVER_LINKS[int(currLeader)]: # Send accept to leader
             sleep(delay)
+            print("SENDING TO LEADER")
             SERVERS[int(currLeader)].sendall(pMsg)
 
 def calcHashPtr():
@@ -453,12 +455,13 @@ def serverResponse(sock, address):
             if isinstance(dataMsg, OpRequest): # Receiving request from CLIENT
                 print("Receiving client request.")
                 dataMsg.setSock(sock)
-                if(dataMsg.getResetLeader()):
-                    currLeader = None
+                if currLeader:
+                    if dataMsg.getResetLeader() and int(currLeader) not in list(SERVERS.keys()) and int(currLeader) != MY_PORT:
+                        currLeader = None
                 if not isLeader: # If current server is not the leader
                     if currLeader is None: # If not leader and there is no leader
                         print("Trying to get elected.")
-                        addToQueue(dataMsg) # TODO: Figure out when to add to queue to deal with concurrent leader requests
+                        addToQueue(dataMsg)
                         sendPrepare()
                     else: # Forward opRequest to actual leader
                         print("Forward request to leader.")
@@ -468,8 +471,10 @@ def serverResponse(sock, address):
                 else: # If current server is already the leader
                     addToQueue(dataMsg)
                     print("I am already the leader.")
+                    print(isLeader)
                     while not tempOp.empty() and isLeader:
                         if not paxosRun:
+                            print("RUNNING PAXOS")
                             paxosRun = True
                             propose()
             if isinstance(dataMsg, Leader): # Receiving LEADER
@@ -492,7 +497,7 @@ def serverResponse(sock, address):
                         myVal = val
                 # Increment promises
                 promises += 1
-                if promises >= 2 and not promised: # Only need two more, already have own approval
+                if promises >= 2 and not promised and bNum.getPid() == processId: # Only need two more, already have own approval
                     promised = True
                     isLeader = True
                     print("I am now the leader.")
@@ -504,18 +509,18 @@ def serverResponse(sock, address):
                             propose()
             if isinstance(dataMsg, UpdateLeader):
                 currLeader = dataMsg.getPort()
-                # while not tempOp.empty() and not isLeader: # Empty out queue if not leader
-                #     print("Forwarding to the actual leader.")
-                #     clientSock = tempOp.get().getSock()
-                #     msg = f"leader|{currLeader}"
-                #     clientSock.sendall(msg.encode("utf8"))
+                while not tempOp.empty():
+                    tempOp.get()
             if isinstance(dataMsg, Propose): # Receiving PROPOSE (aka ACCEPT)
                 print("Receiving a ballot proposal.")
                 b = dataMsg.getBNum()
                 val = dataMsg.getBlock()
                 if currLeader is None:
                     currLeader = dataMsg.getCurrLeader()
-                accept(b, val)
+                if currLeader == dataMsg.getCurrLeader():
+                    accept(b, val)
+                else:
+                    print("Old ballot proposal: no action taken.")
             if isinstance(dataMsg, Accepted): # Receiving ACCEPTED
                 print("Receiving an accepted message.")
                 b = dataMsg.getBNum()

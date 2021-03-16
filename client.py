@@ -12,7 +12,7 @@ SERVER_SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 clientOp = Queue(maxsize = 0) # Operations to send
 receivedResponse = False
 timerActive = False
-delay = 10
+delay = 5
 
 #takes stdin commands
 def processInput():
@@ -91,7 +91,7 @@ def connect():
 def timer():
     global timerActive
     timerActive = True
-    timeLeft = 60
+    timeLeft = 90
     while timeLeft > 0:
         if timerActive:
             print(timeLeft)
