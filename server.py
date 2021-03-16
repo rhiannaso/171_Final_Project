@@ -343,12 +343,14 @@ def failLink(src, dest):
     SERVER_LINKS[int(dest)] = False
     sleep(delay)
     SERVERS[int(dest)].sendall(pickle.dumps(FailLink(src, dest)))
+    print("Failing Link with " + dest)
     return
 
 def fixLink(src, dest):
     SERVER_LINKS[int(dest)] = True
     sleep(delay)
     SERVERS[int(dest)].sendall(pickle.dumps(FixLink(src, dest)))
+    print("Fixing Link with " + dest)
     return
 
 #takes stdin commands
@@ -529,8 +531,10 @@ def serverResponse(sock, address):
                 nonLDecide(b, val) # Decide as a participant
             if isinstance(dataMsg, FailLink):
                 SERVER_LINKS[int(dataMsg.getSrc())] = False
+                print("Failing Link with " + dataMsg.getSrc())
             if isinstance(dataMsg, FixLink):
                 SERVER_LINKS[int(dataMsg.getSrc())] = True
+                print("Fixing Link with " + dataMsg.getSrc())
             if isinstance(dataMsg, FailProcess):
                 SERVERS.pop(int(dataMsg.getPort()), None)
             if isinstance(dataMsg, TestMsg):
