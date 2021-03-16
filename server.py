@@ -177,7 +177,7 @@ def printNum(b):
 
 def sendPrepare():
     global bNum
-    bNum = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, processId)
+    bNum = BallotNum(bNum.getDepth(), bNum.getSeqNum()+1, bNum.getPid())
     prepMsg = Prepare('prepare', bNum, MY_PORT)
     print("Sending prepare messages.")
     broadcastMsg(pickle.dumps(prepMsg))
