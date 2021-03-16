@@ -1,9 +1,8 @@
-import socket, sys, threading, os, queue, time, json, pickle
+import socket, sys, threading, os, queue, time, json, pickle, random
 from queue import Queue
 from opRequest import OpRequest
 from leader import Leader
-import time
-import random
+from time import sleep
 
 IP = "127.0.0.1"
 FOCUS_PORT = None
@@ -13,6 +12,7 @@ SERVER_SOCK = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 clientOp = Queue(maxsize = 0) # Operations to send
 receivedResponse = False
 timerActive = False
+delay = 5
 
 #takes stdin commands
 def processInput():
@@ -41,7 +41,7 @@ def processInput():
             req = OpRequest(op, key, False)
             if op == "put":
                 val = vals[2].strip()
-                req = OpRequest(op, key, False, val)
+                req = OpRequest(op, key, False, False, val)
             clientOp.put(req)
             if clientOp.qsize() == 1: # Only spawn thread if first operation
                 threading.Thread(target=handleOp).start()
@@ -58,6 +58,7 @@ def handleOp():
         if receivedResponse and not clientOp.empty():
             req = clientOp.queue[0]
             msg = pickle.dumps(req)
+            sleep(delay)
             SERVERS[FOCUS_PORT].sendall(msg)
 
             
@@ -90,7 +91,7 @@ def connect():
 def timer():
     global timerActive
     timerActive = True
-    timeLeft = 60
+    timeLeft = 50
     while timeLeft > 0:
         if timerActive:
             print(timeLeft)
@@ -100,14 +101,17 @@ def timer():
             return
     
     timerActive = False
-    req = clientOp.queue[0]
-    req.setResetLeader(True)
-    msg = pickle.dumps(req)
-    #random port swap
-    print("swapping")
-    swap(randomPort())
-    SERVERS[FOCUS_PORT].sendall(msg)
-    threading.Thread(target=timer, args=()).start()
+    print("Timed out.")
+    if not clientOp.empty():
+        req = clientOp.queue[0]
+        req.setResetLeader(True)
+        msg = pickle.dumps(req)
+        #random port swap
+        print("Trying new leader.")
+        swap(randomPort())
+        sleep(delay)
+        SERVERS[FOCUS_PORT].sendall(msg)
+        threading.Thread(target=timer, args=()).start()
 
 
 def randomPort():
@@ -122,20 +126,24 @@ def clientRequest(sock, id):
     global receivedResponse, timerActive
     while True:
         data = sock.recv(1024).decode("utf8")
-        timerActive = False
+        #timerActive = False
         if(data and id == FOCUS_PORT):
             if "leader" in data: # Changing leaders and forwarding
+                timerActive = False
                 server_id = data.split("|")[1]
                 print(server_id)
                 swap(server_id)
                 req = clientOp.queue[0]
+                req.setResetPaxos(True)
                 msg = pickle.dumps(req)
+                sleep(delay)
                 SERVERS[FOCUS_PORT].sendall(msg)
 
                 timerActive = True
                 threading.Thread(target=timer, args=()).start()
             else: # Getting response from server
                 clientOp.get() # Pop off operation
+                timerActive = False
                 receivedResponse = True
                 print(data)
         # if data:

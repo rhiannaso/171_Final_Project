@@ -1,3 +1,5 @@
+from ballotNum import BallotNum
+
 class Leader:
     def __init__(self):
         self.mType = 'leader'
@@ -24,3 +26,4 @@ class UpdateLeader():
     
     def setPort(self, port):
         self.port = port
+    
