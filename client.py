@@ -91,7 +91,7 @@ def connect():
 def timer():
     global timerActive
     timerActive = True
-    timeLeft = 90
+    timeLeft = 50
     while timeLeft > 0:
         if timerActive:
             print(timeLeft)
@@ -134,6 +134,7 @@ def clientRequest(sock, id):
                 print(server_id)
                 swap(server_id)
                 req = clientOp.queue[0]
+                req.setResetPaxos(True)
                 msg = pickle.dumps(req)
                 sleep(delay)
                 SERVERS[FOCUS_PORT].sendall(msg)

@@ -244,12 +244,12 @@ def accept(b, val):
         msg = Accepted("accepted", b, val)
         pMsg = pickle.dumps(msg)
         print(f"Sending accept to current leader: {currLeader}")
-        print(SERVERS[int(currLeader)])
-        print(SERVER_LINKS[int(currLeader)])
         if SERVER_LINKS[int(currLeader)]: # Send accept to leader
             sleep(delay)
-            print("SENDING TO LEADER")
-            SERVERS[int(currLeader)].sendall(pMsg)
+            try:
+                SERVERS[int(currLeader)].sendall(pMsg)
+            except:
+                print("Problem with sending accept")
 
 def calcHashPtr():
     global blockchain
@@ -443,6 +443,14 @@ def serverListener():
 
     MY_SOCK.close()
 
+def handlePaxos():
+    global tempOp, isLeader, paxosRun
+    while not tempOp.empty() and isLeader:
+        if not paxosRun:
+            print("RUNNING PAXOS")
+            paxosRun = True
+            propose()
+
 #handles responses from the other SERVERS
 def serverResponse(sock, address):
     global accepts, promises, myVal, receivedB, isLeader, decided, promised, paxosRun, bNum, currLeader
@@ -458,6 +466,14 @@ def serverResponse(sock, address):
                 if currLeader:
                     if dataMsg.getResetLeader() and int(currLeader) not in list(SERVERS.keys()) and int(currLeader) != MY_PORT:
                         currLeader = None
+                if dataMsg.getResetPaxos():
+                    accepts = 0
+                    promises = 0
+                    paxosRun = False
+                    decided = False
+                    promised = False
+                    receivedB = BallotNum(0,0,0)
+                    myVal = None
                 if not isLeader: # If current server is not the leader
                     if currLeader is None: # If not leader and there is no leader
                         print("Trying to get elected.")
@@ -472,11 +488,7 @@ def serverResponse(sock, address):
                     addToQueue(dataMsg)
                     print("I am already the leader.")
                     print(isLeader)
-                    while not tempOp.empty() and isLeader:
-                        if not paxosRun:
-                            print("RUNNING PAXOS")
-                            paxosRun = True
-                            propose()
+                    threading.Thread(target=handlePaxos).start()
             if isinstance(dataMsg, Leader): # Receiving LEADER
                 sendPrepare()
             if isinstance(dataMsg, Prepare): # Receiving PREPARE
@@ -503,10 +515,7 @@ def serverResponse(sock, address):
                     print("I am now the leader.")
                     currLeader = MY_PORT
                     broadcastMsg(pickle.dumps(UpdateLeader(MY_PORT)))
-                    while not tempOp.empty() and isLeader: # Is now leader, run until queue is empty
-                        if not paxosRun:
-                            paxosRun = True # Ensure paxos only runs on one op at a time
-                            propose()
+                    threading.Thread(target=handlePaxos).start()
             if isinstance(dataMsg, UpdateLeader):
                 currLeader = dataMsg.getPort()
                 while not tempOp.empty():
