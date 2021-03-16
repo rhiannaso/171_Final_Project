@@ -41,7 +41,7 @@ def processInput():
             req = OpRequest(op, key, False)
             if op == "put":
                 val = vals[2].strip()
-                req = OpRequest(op, key, False, val)
+                req = OpRequest(op, key, False, False, val)
             clientOp.put(req)
             if clientOp.qsize() == 1: # Only spawn thread if first operation
                 threading.Thread(target=handleOp).start()

@@ -447,7 +447,6 @@ def handlePaxos():
     global tempOp, isLeader, paxosRun
     while not tempOp.empty() and isLeader:
         if not paxosRun:
-            print("RUNNING PAXOS")
             paxosRun = True
             propose()
 
