@@ -158,22 +158,6 @@ def write():
 #Paxos Code____________________________________________
 
 # Helper Code_________________________________
-# def compareBallots(b1, b2): # Return > 0 if b1 bigger, < 0 if b1 smaller
-#     if b1[0] == b2[0]: # If depth is same
-#         if b1[1] == b2[1]: # If seqNum is same
-#             if b1[2] > b2[2]:
-#                 return 1
-#             else:
-#                 return -1
-#         elif b1[1] > b2[1]:
-#             return 1
-#         else:
-#             return -1
-#     elif b1[0] > b2[0]:
-#         return 1
-#     else:
-#         return -1
-
 def formatOp(op):
     opType = op[0]
     tmp = str(op[0])
@@ -465,6 +449,7 @@ def serverResponse(sock, address):
                 if currLeader:
                     if dataMsg.getResetLeader() and int(currLeader) not in list(SERVERS.keys()) and int(currLeader) != MY_PORT:
                         currLeader = None
+                        bNum.setPid(processId)
                 if dataMsg.getResetPaxos():
                     accepts = 0
                     promises = 0
